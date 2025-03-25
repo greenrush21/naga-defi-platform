@@ -1,0 +1,91 @@
+version: '3.8'
+services:
+  # Supabase services
+  postgres:
+    image: supabase/postgres:15.1.0
+    container_name: naga-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - naga-network
+
+  # Supabase API service
+  supabase-api:
+    image: supabase/postgres-api:latest
+    container_name: naga-supabase-api
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+      ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hZ2EtZGVmaS1wbGF0Zm9ybSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNjE2MTY5MjIyLCJleHAiOjE5MzE3NDUyMjJ9}
+      SERVICE_KEY: ${SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hZ2EtZGVmaS1wbGF0Zm9ybSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE2MTYxNjkyMjIsImV4cCI6MTkzMTc0NTIyMn0}
+    ports:
+      - "3001:3000"
+    networks:
+      - naga-network
+
+  # Backend API service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: naga-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      SUPABASE_URL: http://supabase-api:3000
+      SUPABASE_KEY: ${SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hZ2EtZGVmaS1wbGF0Zm9ybSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE2MTYxNjkyMjIsImV4cCI6MTkzMTc0NTIyMn0}
+      DOCKER_HOST: ${DOCKER_HOST:-tcp://host.docker.internal:2375}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - naga-network
+    depends_on:
+      - postgres
+      - supabase-api
+
+  # Frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: naga-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      VITE_SUPABASE_URL: http://localhost:3001
+      VITE_SUPABASE_ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hZ2EtZGVmaS1wbGF0Zm9ybSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNjE2MTY5MjIyLCJleHAiOjE5MzE3NDUyMjJ9}
+      VITE_API_URL: http://localhost:3000
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - naga-network
+    depends_on:
+      - backend
+
+networks:
+  naga-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
